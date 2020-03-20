@@ -15,6 +15,13 @@ sudo apt-get update -qq
 sudo apt-get -y install qt59base qt59webengine qt59webchannel qt59svg qt59location qt59tools qt59translations
 source /opt/qt*/bin/qt*-env.sh
 
+# Compile qt5ct
+wget -c https://excellmedia.dl.sourceforge.net/project/qt5ct/qt5ct-0.37.tar.bz2
+tar xf qt5ct-0.*.tar.bz2
+cd qt5ct-0.*/
+QT_SELECT=5 qmake
+make -j$(nproc) && sudo make install
+
 # Compile newer version fcitx-qt5
 sudo apt-get -y install fcitx-libs-dev libgl1-mesa-dev bison
 sudo apt-get -y install cmake
@@ -76,13 +83,13 @@ cp vnote-utils.git/linuxdeployqt-continuous-x86_64.AppImage ./linuxdeployqt-cont
 # wget -c "https://github.com/probonopd/linuxdeployqt/releases/download/continuous/linuxdeployqt-continuous-x86_64.AppImage"
 chmod a+x linuxdeployqt*.AppImage
 unset QTDIR; unset QT_PLUGIN_PATH ; unset LD_LIBRARY_PATH
-./linuxdeployqt*.AppImage ./dist/usr/share/applications/*.desktop -bundle-non-qt-libs -exclude-libs=libnss3,libnssutil3
+./linuxdeployqt*.AppImage ./dist/usr/share/applications/*.desktop -bundle-non-qt-libs -exclude-libs=libnss3,libnssutil3 -extra-plugins=platformthemes/libqt5ct.so,styles/libqt5ct-style.so
 
 # Copy translations
 cp /opt/qt59/translations/*_zh_CN.qm ./dist/usr/translations/
 
 # Package it for the second time.
-./linuxdeployqt*.AppImage ./dist/usr/share/applications/*.desktop -appimage -exclude-libs=libnss3,libnssutil3
+./linuxdeployqt*.AppImage ./dist/usr/share/applications/*.desktop -appimage -exclude-libs=libnss3,libnssutil3 -extra-plugins=platformthemes/libqt5ct.so,styles/libqt5ct-style.so
 
 tree dist/
 

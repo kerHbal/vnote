@@ -86,7 +86,8 @@ VMainWindow::VMainWindow(VSingleInstanceGuard *p_guard, QWidget *p_parent)
       m_windowOldState(Qt::WindowNoState),
       m_requestQuit(false),
       m_printer(NULL),
-      m_ue(NULL)
+      m_ue(NULL),
+      m_syncNoteListToCurrentTab(true)
 {
     qsrand(QDateTime::currentDateTime().toTime_t());
 
@@ -130,6 +131,9 @@ VMainWindow::VMainWindow(VSingleInstanceGuard *p_guard, QWidget *p_parent)
     initUpdateTimer();
 
     registerCaptainAndNavigationTargets();
+#if defined(Q_OS_MACOS) || defined(Q_OS_MAC)
+    QApplication::setQuitOnLastWindowClosed(false);
+#endif
 }
 
 void VMainWindow::initSharedMemoryWatcher()
@@ -196,6 +200,10 @@ void VMainWindow::registerCaptainAndNavigationTargets()
                                      g_config->getCaptainShortcutKeySequence("ExpandMode"),
                                      this,
                                      toggleExpandModeByCaptain);
+    m_captain->registerCaptainTarget(tr("CurrentNoteInfo"),
+                                     g_config->getCaptainShortcutKeySequence("CurrentNoteInfo"),
+                                     this,
+                                     currentNoteInfoByCaptain);
     m_captain->registerCaptainTarget(tr("DiscardAndRead"),
                                      g_config->getCaptainShortcutKeySequence("DiscardAndRead"),
                                      this,
@@ -271,7 +279,14 @@ void VMainWindow::setupUI()
     connect(m_fileList, &VFileList::fileClicked,
             m_editArea, &VEditArea::openFile);
     connect(m_fileList, &VFileList::fileCreated,
-            m_editArea, &VEditArea::openFile);
+            m_editArea, [this](VNoteFile *p_file,
+                               OpenFileMode p_mode,
+                               bool p_forceMode) {
+                if (p_file->getDocType() == DocType::Markdown
+                    || p_file->getDocType() == DocType::Html) {
+                    m_editArea->openFile(p_file, p_mode, p_forceMode);
+                }
+            });
     connect(m_fileList, &VFileList::fileUpdated,
             m_editArea, &VEditArea::handleFileUpdated);
     connect(m_editArea, &VEditArea::tabStatusUpdated,
@@ -730,7 +745,9 @@ QToolBar *VMainWindow::initFileToolBar(QSize p_iconSize)
             m_fileList, &VFileList::newFile);
 
     noteInfoAct = new QAction(VIconUtils::toolButtonIcon(":/resources/icons/note_info_tb.svg"),
-                              tr("Note Info"), this);
+                              tr("Note Info"),
+                              this);
+    VUtils::fixTextWithCaptainShortcut(noteInfoAct, "CurrentNoteInfo");
     noteInfoAct->setStatusTip(tr("View and edit current note's information"));
     connect(noteInfoAct, &QAction::triggered,
             this, &VMainWindow::curEditFileInfo);
@@ -2137,6 +2154,10 @@ void VMainWindow::handleAreaTabStatusUpdated(const VEditTabInfo &p_info)
 
         m_attachmentList->setFile(dynamic_cast<VNoteFile *>(m_curFile.data()));
 
+        if (m_syncNoteListToCurrentTab && g_config->getSyncNoteListToTab()) {
+            locateFile(m_curFile, false, false);
+        }
+
         QString title;
         if (m_curFile) {
             m_findReplaceDialog->updateState(m_curFile->getDocType(),
@@ -2233,7 +2254,10 @@ void VMainWindow::closeEvent(QCloseEvent *event)
 
 #if defined(Q_OS_MACOS) || defined(Q_OS_MAC)
     // Do not support minimized to tray on macOS.
-    isExit = true;
+    if (!isExit) {
+        event->accept();
+        return;
+    }
 #endif
 
     if (!isExit && g_config->getMinimizeToStystemTray() == -1) {
@@ -2290,9 +2314,12 @@ void VMainWindow::closeEvent(QCloseEvent *event)
             }
         }
 
+        m_syncNoteListToCurrentTab = false;
+
         if (!m_editArea->closeAllFiles(false)) {
             // Fail to close all the opened files, cancel closing app.
             event->ignore();
+            m_syncNoteListToCurrentTab = true;
             return;
         }
 
@@ -2371,7 +2398,7 @@ void VMainWindow::keyPressEvent(QKeyEvent *event)
     QMainWindow::keyPressEvent(event);
 }
 
-bool VMainWindow::locateFile(VFile *p_file)
+bool VMainWindow::locateFile(VFile *p_file, bool p_focus, bool p_show)
 {
     bool ret = false;
     if (!p_file || p_file->getType() != FileType::Note) {
@@ -2393,13 +2420,15 @@ bool VMainWindow::locateFile(VFile *p_file)
 
             if (m_fileList->locateFile(file)) {
                 ret = true;
-                m_fileList->setFocus();
+                if (p_focus) {
+                    m_fileList->setFocus();
+                }
             }
         }
     }
 
     // Open the directory and file panels after location.
-    if (ret) {
+    if (ret && p_show) {
         showNotebookPanel();
     }
 
@@ -2724,9 +2753,11 @@ void VMainWindow::initTrayIcon()
 
     connect(m_trayIcon, &QSystemTrayIcon::activated,
             this, [this](QSystemTrayIcon::ActivationReason p_reason){
+#if !defined(Q_OS_MACOS) && !defined(Q_OS_MAC)
                 if (p_reason == QSystemTrayIcon::Trigger) {
                     this->showMainWindow();
                 }
+#endif
             });
 
     m_trayIcon->show();
@@ -2845,6 +2876,17 @@ bool VMainWindow::toggleExpandModeByCaptain(void *p_target, void *p_data)
     Q_UNUSED(p_data);
     VMainWindow *obj = static_cast<VMainWindow *>(p_target);
     obj->expandViewAct->trigger();
+    return true;
+}
+
+bool VMainWindow::currentNoteInfoByCaptain(void *p_target, void *p_data)
+{
+    Q_UNUSED(p_data);
+    VMainWindow *obj = static_cast<VMainWindow *>(p_target);
+    if (obj->noteInfoAct->isEnabled()) {
+        obj->curEditFileInfo();
+    }
+
     return true;
 }
 
@@ -3100,9 +3142,11 @@ void VMainWindow::initThemeMenu(QMenu *p_menu)
 
     QActionGroup *ag = new QActionGroup(this);
     connect(ag, &QActionGroup::triggered,
-            this, [](QAction *p_action) {
+            this, [this](QAction *p_action) {
                 QString data = p_action->data().toString();
                 g_config->setTheme(data);
+
+                promptForVNoteRestart();
             });
 
     QList<QString> themes = g_config->getThemes();
@@ -3411,6 +3455,8 @@ void VMainWindow::setToolBarVisible(bool p_visible)
 void VMainWindow::kickOffStartUpTimer(const QStringList &p_files)
 {
     QTimer::singleShot(300, [this, p_files]() {
+        m_syncNoteListToCurrentTab = false;
+
         checkNotebooks();
         QCoreApplication::sendPostedEvents();
         promptNewNotebookIfEmpty();
@@ -3418,20 +3464,15 @@ void VMainWindow::kickOffStartUpTimer(const QStringList &p_files)
         openStartupPages();
         openFiles(p_files, false, g_config->getNoteOpenMode(), false, true);
 
-        if (g_config->versionChanged()
-            || (QDate::currentDate().dayOfYear() % 64 == 1)) {
-            QString docFile = VUtils::getDocFile("welcome.md");
-            VFile *file = vnote->getFile(docFile, true);
-            m_editArea->openFile(file, OpenFileMode::Read);
-        }
+        checkIfNeedToShowWelcomePage();
 
-        if (g_config->versionChanged()) {
+        if (g_config->versionChanged() && !g_config->getAllowUserTrack()) {
             // Ask user whether allow tracking.
             int ret = VUtils::showMessage(QMessageBox::Information,
                                           tr("Collect User Statistics"),
                                           tr("VNote would like to send a request to count active users."
                                              "Do you allow this request?"),
-                                          tr("A request to https://tajs.qq.com/stats will be sent if allowed."),
+                                          tr("A request to https://tamlok.github.io/user_track/vnote.html will be sent if allowed."),
                                           QMessageBox::Ok | QMessageBox::No,
                                           QMessageBox::Ok,
                                           this);
@@ -3439,8 +3480,31 @@ void VMainWindow::kickOffStartUpTimer(const QStringList &p_files)
         }
 
         if (g_config->getAllowUserTrack()) {
-            QTimer::singleShot(60000, this, SLOT(collectUserStat()));
+            int interval = (30 + qrand() % 60) * 1000;
+            QTimer::singleShot(interval, this, SLOT(collectUserStat()));
         }
+
+        m_syncNoteListToCurrentTab = true;
+
+#if defined(Q_OS_WIN)
+        if (g_config->isFreshInstall()) {
+            VUtils::showMessage(QMessageBox::Information,
+                                tr("Notices for Windows Users"),
+                                tr("OpenGL requried by VNote may not work well on Windows by default."
+                                   "You may update your display card driver or set another openGL option in VNote's Settings dialog."
+                                   "Check <a href=\"https://github.com/tamlok/vnote/issues/853\">GitHub issue</a> for details."),
+                                tr("Strange behaviors include:<br/>"
+                                   "* Interface freezes and does not response;<br/>"
+                                   "* Widgets are out of order after maximizing and restoring the main window;<br/>"
+                                   "* No cursor in edit mode;<br/>"
+                                   "* Menus are not clickable in full screen mode."),
+                                QMessageBox::Ok,
+                                QMessageBox::Ok,
+                                this);
+        }
+#endif
+
+        g_config->updateLastStartDateTime();
     });
 }
 
@@ -3545,12 +3609,48 @@ void VMainWindow::setupFileListSplitOut(bool p_enabled)
 
 void VMainWindow::collectUserStat() const
 {
-    QWebEnginePage *page = new QWebEnginePage;
-    page->load(QUrl("https://tamlok.github.io/user_track/vnote.html"));
-    connect(page, &QWebEnginePage::loadFinished,
-            this, [page](bool) {
-                VUtils::sleepWait(2000);
-                page->deleteLater();
-            });
+    // One request per day.
+    auto lastCheckDate = g_config->getLastUserTrackDate();
+    if (lastCheckDate != QDate::currentDate()) {
+        g_config->updateLastUserTrackDate();
+
+        qDebug() << "send user track" << QDate::currentDate();
+
+        QWebEnginePage *page = new QWebEnginePage;
+
+        QString url = QString("https://tamlok.github.io/user_track/vnote/vnote_%1.html").arg(VConfigManager::c_version);
+        page->load(QUrl(url));
+        connect(page, &QWebEnginePage::loadFinished,
+                this, [page](bool) {
+                    VUtils::sleepWait(2000);
+                    page->deleteLater();
+                });
+    }
+
+    QTimer::singleShot(30 * 60 * 1000, this, SLOT(collectUserStat()));
 }
 
+void VMainWindow::promptForVNoteRestart()
+{
+    int ret = VUtils::showMessage(QMessageBox::Information,
+                                  tr("Restart Needed"),
+                                  tr("Do you want to restart VNote now?"),
+                                  tr("VNote needs to restart to apply new configurations."),
+                                  QMessageBox::Ok | QMessageBox::No,
+                                  QMessageBox::Ok,
+                                  this);
+    if (ret == QMessageBox::Ok) {
+        restartVNote();
+    }
+}
+
+void VMainWindow::checkIfNeedToShowWelcomePage()
+{
+    if (g_config->versionChanged()
+        || (QDate::currentDate().dayOfYear() % 64 == 1
+            && g_config->getLastStartDateTime().date() != QDate::currentDate())) {
+        QString docFile = VUtils::getDocFile("welcome.md");
+        VFile *file = vnote->getFile(docFile, true);
+        m_editArea->openFile(file, OpenFileMode::Read);
+    }
+}

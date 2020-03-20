@@ -10,6 +10,7 @@
 #include <QStandardPaths>
 #include <QCoreApplication>
 #include <QScopedPointer>
+#include <QDateTime>
 
 #include "utils/vutils.h"
 #include "vstyleparser.h"
@@ -19,7 +20,7 @@ const QString VConfigManager::orgName = QString("vnote");
 
 const QString VConfigManager::appName = QString("vnote");
 
-const QString VConfigManager::c_version = QString("2.2");
+const QString VConfigManager::c_version = QString("2.8.2");
 
 const QString VConfigManager::c_dirConfigFile = QString("_vnote.json");
 
@@ -77,6 +78,30 @@ void VConfigManager::initialize()
     initCssStyles();
 
     initCodeBlockCssStyles();
+
+    m_githubPersonalAccessToken = getConfigFromSettings("global", "github_personal_access_token").toString();
+    m_githubReposName = getConfigFromSettings("global", "github_repos_name").toString();
+    m_githubUserName = getConfigFromSettings("global", "github_user_name").toString();
+    m_githubKeepImgScale = getConfigFromSettings("global", "github_keep_img_scale").toBool();
+    m_githubDoNotReplaceLink = getConfigFromSettings("global", "github_do_not_replace_link").toBool();
+
+    m_giteePersonalAccessToken = getConfigFromSettings("global", "gitee_personal_access_token").toString();
+    m_giteeReposName = getConfigFromSettings("global", "gitee_repos_name").toString();
+    m_giteeUserName = getConfigFromSettings("global", "gitee_user_name").toString();
+    m_giteeKeepImgScale = getConfigFromSettings("global", "gitee_keep_img_scale").toBool();
+    m_giteeDoNotReplaceLink = getConfigFromSettings("global", "gitee_do_not_replace_link").toBool();
+
+    m_wechatAppid = getConfigFromSettings("global", "wechat_appid").toString();
+    m_wechatSecret = getConfigFromSettings("global", "wechat_secret").toString();
+    m_markdown2WechatToolUrl = getConfigFromSettings("global", "wechat_markdown_to_wechat_tool_url").toString();
+    m_wechatKeepImgScale = getConfigFromSettings("global", "wechat_keep_img_scale").toBool();
+    m_wechatDoNotReplaceLink = getConfigFromSettings("global", "wechat_do_not_replace_link").toBool();
+
+    m_tencentAccessDomainName = getConfigFromSettings("global", "tencent_access_domain_name").toString();
+    m_tencentSecretId = getConfigFromSettings("global", "tencent_secret_id").toString();
+    m_tencentSecretKey = getConfigFromSettings("global", "tencent_secret_key").toString();
+    m_tencentKeepImgScale = getConfigFromSettings("global", "tencent_keep_img_scale").toBool();
+    m_tencentDoNotReplaceLink = getConfigFromSettings("global", "tencent_do_not_replace_link").toBool();
 
     m_theme = getConfigFromSettings("global", "theme").toString();
 
@@ -326,9 +351,15 @@ void VConfigManager::initialize()
     m_highlightMatchesInPage = getConfigFromSettings("global",
                                                      "highlight_matches_in_page").toBool();
 
+    m_syncNoteListToCurrentTab = getConfigFromSettings("global",
+                                                       "sync_note_list_to_current_tab").toBool();
+
     initEditorConfigs();
 
     initMarkdownConfigs();
+
+    m_enableCodeBlockCopyButton = getConfigFromSettings("web",
+                                                        "enable_code_block_copy_button").toBool();
 }
 
 void VConfigManager::initEditorConfigs()
@@ -373,6 +404,8 @@ void VConfigManager::initEditorConfigs()
     m_editorFontFamily = getConfigFromSettings(section, "editor_font_family").toString();
 
     m_enableSmartTable = getConfigFromSettings(section, "enable_smart_table").toBool();
+
+    m_tableFormatIntervalMS = getConfigFromSettings(section, "table_format_interval").toInt();
 }
 
 void VConfigManager::initMarkdownConfigs()
@@ -893,6 +926,7 @@ const QString &VConfigManager::getCommonCssUrl() const
     if (cssPath.isEmpty()) {
         cssPath = QDir(getResourceConfigFolder()).filePath("common.css");
         if (m_versionChanged || !QFileInfo::exists(cssPath)) {
+            VUtils::deleteFile(cssPath);
             // Output the default one.
             if (!VUtils::copyFile(":/resources/common.css", cssPath, false)) {
                 cssPath = "qrc:/resources/common.css";
@@ -1496,6 +1530,10 @@ void VConfigManager::initThemes()
     m_themes.insert(VPalette::themeName(file), file);
     file = ":/resources/themes/v_detorte/v_detorte.palette";
     m_themes.insert(VPalette::themeName(file), file);
+    file = ":/resources/themes/v_simple/v_simple.palette";
+    m_themes.insert(VPalette::themeName(file), file);
+    file = ":/resources/themes/v_next/v_next.palette";
+    m_themes.insert(VPalette::themeName(file), file);
 
     outputBuiltInThemes();
 
@@ -1690,6 +1728,7 @@ void VConfigManager::checkVersion()
     const QString key("version");
     QString ver = getConfigFromSettings("global", key).toString();
     m_versionChanged = ver != c_version;
+    m_freshInstall = ver.isEmpty();
     if (m_versionChanged) {
         setConfigToSettings("global", key, c_version);
     }
@@ -1730,4 +1769,33 @@ void VConfigManager::setWindowsOpenGL(int p_openGL)
 
     QString fullKey("global/windows_opengl");
     userSet->setValue(fullKey, p_openGL);
+}
+
+QDate VConfigManager::getLastUserTrackDate() const
+{
+
+    auto dateStr = getConfigFromSessionSettings("global",
+                                                "last_user_track_date").toString();
+    return QDate::fromString(dateStr, Qt::ISODate);
+}
+
+void VConfigManager::updateLastUserTrackDate()
+{
+    auto date = QDate::currentDate();
+    setConfigToSessionSettings("global",
+                               "last_user_track_date",
+                               date.toString(Qt::ISODate));
+}
+
+QDateTime VConfigManager::getLastStartDateTime() const
+{
+    auto dateStr = getConfigFromSessionSettings("global",
+                                                "last_start_time").toString();
+    return QDateTime::fromString(dateStr, Qt::ISODate);
+}
+
+void VConfigManager::updateLastStartDateTime()
+{
+    auto dateTime = QDateTime::currentDateTime();
+    setConfigToSessionSettings("global", "last_start_time", dateTime.toString(Qt::ISODate));
 }

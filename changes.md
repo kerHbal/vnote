@@ -1,4 +1,53 @@
 # Changes History
+## v2.8.2
+- Upgrade Mermaid.js;
+
+## v2.8.1
+- Fix PlantUML online resources;
+- MacOS: support staying in tray;
+- Add a configuration in Settings to control code block copy button;
+
+## v2.8
+- Add supports for image hosting, including service GitHub, Gitee, Wechat, and Tencent Cloud; (@fengwenhua)
+- Support sorting notebooks in context menu;
+- Add theme v_next; (@hzhu212);
+
+## v2.7.2
+- Use 5.9.8 on macOS;
+- Call Java (PlantUML) directly on Win;
+
+## v2.7.1
+- Fix PlantUML command;
+- Use 5.12.0 on macOS;
+- Add config [web]/enable_code_block_copy_button for copy button in code block in read mode;
+
+## v2.7
+- Editor
+    - Fix smart table bugs;
+    - Fix improper leading line space on macOS;
+- Fix bug which will open two tabs for the same file;
+- Add copy button to copy code block in read mode;
+- PluatUML: use shell to launch Java;
+- Use qt 5.12.1 on macOS for better performance;
+- Add theme `v_simple` provided by user LuoshuiTianyi;
+- Support adding sibling folder in context menu;
+
+## v2.6
+- Version-specific user track;
+
+## v2.5
+- Do not open unknown type file when creating a new note;
+- Support Right-To-Left text in edit mode (with Vim mode disabled);
+- Remove credict information in export template;
+
+## v2.4
+- Bundle qt5ct in Linux for native look support;
+- Use `Return` or `Enter` to confirm selection in macOS (besides `Cmd+O`);
+- Support sync note list to current note automatically via config `global/sync_note_list_to_current_tab`;
+- Add `Ctrl+E N` to view and edit current note's information;
+- Fix Markdown highlighter to handle fenced code block without a leading empty line;
+- Prompt for restart after changing theme;
+
 ## v2.3
 - Add Japanese translations (thanks to @miurahr);
 - Editor

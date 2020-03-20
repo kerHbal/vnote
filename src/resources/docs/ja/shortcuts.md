@@ -265,6 +265,8 @@ RemoveSplit=R
 全文検索を切り替えます。
 - `P`
 クリップボードのHTMLをMarksownテキストとして貼り付けます。
+- `N`  
+View and edit current note's information.
 - `Shift+?` 
 ショートカットのドキュメントを表示します。
 
@@ -273,6 +275,13 @@ RemoveSplit=R
 
 # Vimモード
 VNoteは、**Normal**、**Insert**、**Visual**、および**VisualLine**の各モードを含む、単純で有用なVimモードをサポートしています。
+
+::: alert-info
+
+`ファイル`メニューから、`設定`ダイアログを開き、 `読み取り/編集` タブへすすみます。 コンボボックスの`キーモード`を
+選択することでVimモードを有効にできます。 すぐに稼動させるには、VNoteの再起動が必要です。
+
+:::
 
 VNoteはVimの次の機能をサポートしています：
 
